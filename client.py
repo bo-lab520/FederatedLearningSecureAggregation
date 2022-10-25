@@ -154,7 +154,7 @@ class Client(object):
             part_secretkey_bu[client_id] = []
             part_secretkey_bu[client_id].append(part_secretkey[client_id])
             part_secretkey_bu[client_id].append(part_bu[client_id])
-        self.client_shared_key_bu[self.client_id] = [part_secretkey_bu[self.client_id]]
+        self.client_shared_key_bu[self.client_id] = part_secretkey_bu[self.client_id]
         self.send_partkey_to_adj({self.client_id: part_secretkey_bu})
 
     # 计算时延

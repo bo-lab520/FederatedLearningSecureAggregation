@@ -9,11 +9,34 @@ class Server(object):
         # 最小生成树结构
         self.part_connect_graph = []
 
+        # 所有的客户端的secretkey和bu的份额
+        self.all_part_secretkey_bu = {}
+
+        self.client_list = []
+
         self.conf = conf
 
         self.global_model = models.get_model(self.conf["model_name"])
 
         self.eval_loader = torch.utils.data.DataLoader(eval_dataset, batch_size=self.conf["batch_size"], shuffle=True)
+
+    def reveive_msg(self):
+        pass
+
+    # 收集来自客户端的份额
+    def collect_shared_secretkey_bu(self, client_shared_key_bu):
+        for client_id in client_shared_key_bu:
+            if client_id in self.all_part_secretkey_bu.keys():
+                self.all_part_secretkey_bu[client_id].append(client_shared_key_bu[client_id])
+            else:
+                self.all_part_secretkey_bu[client_id] = [client_shared_key_bu[client_id]]
+
+    # 根据份额重建密钥和bu
+    def reconstruct_secretkey_bu(self):
+        if len(self.all_part_secretkey_bu >= 3):
+            pass
+        else:
+            pass
 
     # 模型聚合函数agg
     # weight_accumulator 存储了每一个客户端的上传参数变化值/差值
@@ -31,7 +54,6 @@ class Server(object):
                 # print(data)
                 data.add_(update_per_layer)
                 # print(data)
-
 
     # 模型评估
     def model_eval(self):

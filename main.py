@@ -43,6 +43,7 @@ if __name__ == '__main__':
         for c in candidates:
             candidates_dict[c.client_id] = c
             c.client_list = candidates
+        server.client_list = candidates
 
         # 每个客户端把通信时延传给CA
         communication_cost = c.compute_communication_cost()
@@ -66,26 +67,23 @@ if __name__ == '__main__':
 
         # t-out-of-n 分发bu和密钥
 
-
-
         # 遍历客户端，每个客户端本地训练模型 加掩码mask
         for c in candidates:
             diff = c.local_train(server.global_model)
             # mask
-            shared_keys = {}
-            for client1, client2, cost in c.part_connect_graph:
-                if int(client1) == c.client_id:
-                    shared_keys[client2] = candidates_dict[client2].sec_agg.public_key()
-                if int(client2) == c.client_id:
-                    shared_keys[client1] = candidates_dict[client1].sec_agg.public_key()
-            for name in diff:
-                item = diff[name].detach().numpy()
-                dim = item.shape
-                c.sec_agg.set_weights(diff, dim)
-                c.sec_agg.prepare_weights(shared_keys, c.client_id)
+            # shared_keys = {}
+            # for client1, client2, cost in c.part_connect_graph:
+            #     if int(client1) == c.client_id:
+            #         shared_keys[client2] = candidates_dict[client2].sec_agg.public_key()
+            #     if int(client2) == c.client_id:
+            #         shared_keys[client1] = candidates_dict[client1].sec_agg.public_key()
+            # for name in diff:
+            #     item = diff[name].detach().numpy()
+            #     dim = item.shape
+            #     c.sec_agg.set_weights(diff, dim)
+            #     c.sec_agg.prepare_weights(shared_keys, c.client_id)
             # 模型反演攻击
             # ...
-
 
             # 根据客户端的参数差值字典更新总体权重
             for name, params in server.global_model.state_dict().items():

@@ -13,6 +13,7 @@ class GraphStruct(object):
         self.part_connect_graph = []
 
     def communication_cost(self, communication_cost):
+        global cur_node_num
         cur_node_num += 1
         if cur_node_num == self.node_number:
             # 构造全连通图
@@ -26,7 +27,7 @@ class GraphStruct(object):
                      ("2", "3", 8), ("2", "4", 6), ("2", "5", 11),
                      ("3", "4", 15), ("3", "5", 12),
                      ("4", "5", 7)]
-            self.all_connect_graph.append(edges)
+            self.all_connect_graph = edges
         else:
             self.client_communication_cost.append(communication_cost)
 
