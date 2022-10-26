@@ -125,13 +125,17 @@ class Client(object):
         for i in range(n):
             key = k
             for j in range(t - 1):
-                key += params[j] * (i + 1)
-            key = key % self.sec_agg.mod
+                key += params[j] * (i + 1)**(j+1)
+            # key = key % self.sec_agg.mod
             part_key[self.client_list[i].client_id] = key
         return part_key
 
     # 将份额传递给邻居
-    def send_partkey_to_adj(self, msg):
+    def send_part_secretkey_bu_to_adj(self, msg):
+        pass
+
+    def send_shared_secretkey_bu_to_server(self):
+        # send {self.client_id:self.client_shared_key_bu}
         pass
 
     def receive_msg(self):

@@ -28,7 +28,7 @@ if __name__ == '__main__':
 
     # 添加10个客户端
     for c in range(conf["no_models"]):
-        clients.append(Client(conf, server.global_model, train_datasets, c))
+        clients.append(Client(conf, server.global_model, train_datasets, c + 1))
 
     # 生成图
     generate_graph = GraphStruct()
@@ -38,6 +38,14 @@ if __name__ == '__main__':
         print("Global Epoch %d" % e)
         # 每次训练都是从clients列表中随机采样k个进行本轮训练
         candidates = random.sample(clients, conf["k"])
+        # 排序 按照id从小到大
+        for i in range(len(candidates)):
+            for j in range(i + 1, len(candidates)):
+                if candidates[j].client_id < candidates[i].client_id:
+                    temp = candidates[i]
+                    candidates[i] = candidates[j]
+                    candidates[j] = temp
+
         generate_graph.node_number = len(candidates)
         candidates_dict = {}
         for c in candidates:
@@ -57,31 +65,32 @@ if __name__ == '__main__':
             c.part_connect_graph = generate_graph.part_connect_graph
         server.part_connect_graph = generate_graph.part_connect_graph
 
-        weight_accumulator = {}
+        # t-out-of-n 分发bu和密钥
+        for c in candidates:
+            c.shared_secretkey_bu()
 
+        weight_accumulator = {}
         # torch.nn.Module模块中的state_dict变量存放训练过程中需要学习的权重和偏执系数，
         # state_dict作为python的字典对象将每一层的参数映射成tensor张量
         for name, params in server.global_model.state_dict().items():
             # 生成一个和参数矩阵大小相同的0矩阵
             weight_accumulator[name] = torch.zeros_like(params)
 
-        # t-out-of-n 分发bu和密钥
-
         # 遍历客户端，每个客户端本地训练模型 加掩码mask
         for c in candidates:
             diff = c.local_train(server.global_model)
             # mask
-            # shared_keys = {}
-            # for client1, client2, cost in c.part_connect_graph:
-            #     if int(client1) == c.client_id:
-            #         shared_keys[client2] = candidates_dict[client2].sec_agg.public_key()
-            #     if int(client2) == c.client_id:
-            #         shared_keys[client1] = candidates_dict[client1].sec_agg.public_key()
-            # for name in diff:
-            #     item = diff[name].detach().numpy()
-            #     dim = item.shape
-            #     c.sec_agg.set_weights(diff, dim)
-            #     c.sec_agg.prepare_weights(shared_keys, c.client_id)
+            shared_keys = {}
+            for client1, client2, cost in c.part_connect_graph:
+                if int(client1) == c.client_id:
+                    shared_keys[client2] = candidates_dict[client2].sec_agg.public_key()
+                if int(client2) == c.client_id:
+                    shared_keys[client1] = candidates_dict[client1].sec_agg.public_key()
+            for name in diff:
+                item = diff[name].detach().numpy()
+                dim = item.shape
+                c.sec_agg.set_weights(diff, dim)
+                c.sec_agg.prepare_weights(shared_keys, c.client_id)
             # 模型反演攻击
             # ...
 
@@ -91,14 +100,10 @@ if __name__ == '__main__':
                 # print(name)
                 # print(weight_accumulator[name])
 
-        # client_socket.send(weight_accumulator)
-
-        # 模型参数聚合
-        # print(weight_accumulator)
-        # for name, params in server.global_model.state_dict().items():
-        #     print(name)
-        #     print(params)
+        # 聚合
         server.model_aggregate(weight_accumulator)
+        # unmask
+        server.unmask()
         # 模型评估
         for name, params in server.global_model.state_dict().items():
             print(name)
