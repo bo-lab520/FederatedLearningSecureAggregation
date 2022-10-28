@@ -1,3 +1,5 @@
+from copy import deepcopy
+
 import models, torch
 import numpy as np
 
@@ -45,10 +47,13 @@ class Server(object):
                     client_shared_key_bu[j] = temp
 
         if len(client_shared_key_bu) >= t:
-            y = []
+            y_bu = []
+            y_secretkey = []
             for item in client_shared_key_bu:
                 _id = list(item.keys())[0]
-                y.append(item[id])
+                # [secretkey, bu]
+                y_secretkey.append(item[_id][0])
+                y_bu.append(item[_id][1])
             A = []
             for i in range(t):
                 a = [1]
@@ -56,31 +61,89 @@ class Server(object):
                     # a.append(((i + 1) ** (j + 1)) % mod)
                     a.append((i + 1) ** (j + 1))
                 A.append(a)
-            _A = []
+            A_bu = []
+            A_secretkey = []
             for i in range(t):
-                a = [y[i]]
+                a_bu = [y_bu[i]]
+                a_secretkey = [y_secretkey[i]]
                 for j in range(t - 1):
-                    a.append(A[i][j + 1])
-                _A.append(a)
-            k = np.linalg.det(_A) / np.linalg.det(A)
-            return k
+                    a_bu.append(A[i][j + 1])
+                    a_secretkey.append(A[i][j + 1])
+                A_bu.append(a_bu)
+                A_secretkey.append(a_secretkey)
+            bu = np.linalg.det(A_bu) / np.linalg.det(A)
+            k = np.linalg.det(A_secretkey) / np.linalg.det(A)
+            # 取整
+            if k - int(k) > 0.9:
+                k = int(k) + 1
+            else:
+                k = int(k)
+            if bu - int(bu) > 0.9:
+                bu = int(bu) + 1
+            else:
+                bu = int(bu)
+            return [k, bu]
         else:
             pass
-        return -1
+        return []
+
+    # 生成噪声张量（加噪声） PRG伪随机生成器，seed一样，随机向量也一样
+    def generate_weights(self, seed, dim, _type):
+        # 定义随机数种子
+        np.random.seed(seed)
+        # 生成dim维度的向量
+        if len(dim) == 0:
+            if _type == np.int64:
+                return np.int64(np.random.rand())
+            if _type == np.float32:
+                return np.int64(np.random.rand())
+        if len(dim) == 1:
+            if _type == np.int64:
+                return np.int64(np.random.rand(dim[0]))
+            if _type == np.float32:
+                return np.float32(np.random.rand(dim[0]))
+        if len(dim) == 2:
+            if _type == np.int64:
+                return np.int64(np.random.rand(dim[0], dim[1]))
+            if _type == np.float32:
+                return np.float32(np.random.rand(dim[0], dim[1]))
+        if len(dim) == 3:
+            if _type == np.int64:
+                return np.int64(np.random.rand(dim[0], dim[1], dim[2]))
+            if _type == np.float32:
+                return np.float32(np.random.rand(dim[0], dim[1], dim[2]))
+        if len(dim) == 4:
+            if _type == np.int64:
+                return np.int64(np.random.rand(dim[0], dim[1], dim[2], dim[3]))
+            if _type == np.float32:
+                return np.float32(np.random.rand(dim[0], dim[1], dim[2], dim[3]))
+
+    # 服务器如果没有收到某个客户端的梯度，就会自己生成掩码去unmask
+    def reveal(self, keylist):
+        wghts = np.zeros(self.dim)
+        for each in keylist:
+            if each < self.id:
+                wghts -= self.generate_weights((self.keys[each] ** self.secretkey) % 17)
+            elif each > self.id:
+                wghts += self.generate_weights((self.keys[each] ** self.secretkey) % 17)
+        return -1 * wghts
 
     def unmask(self):
-        weight_accumulator = {}
-        for name, params in self.global_model.state_dict().items():
-            weight_accumulator[name] = torch.zeros_like(params)
-
         for client_id in self.all_part_secretkey_bu:
-            bu = self.reconstruct_secretkey_bu(3, self.all_part_secretkey_bu[client_id])
-            np.random.seed(bu)
-            for name, params in self.global_model.state_dict().items():
-                item = params.detach().numpy()
+            # 重构key bu
+            secretkey_bu = self.reconstruct_secretkey_bu(3, self.all_part_secretkey_bu[client_id])
+            # 消除bu掩码
+            for name, data in self.global_model.state_dict().items():
+                item = data.detach().numpy()
                 dim = item.shape
-                bu_mask = np.float32(np.random.rand(dim))
-                weight_accumulator[name].add_(-1 * bu_mask)
+                _type = item.dtype
+                print(_type)
+                bu_mask = -self.conf["lambda"] * self.generate_weights(secretkey_bu[1], dim, _type)
+                bu_mask = torch.tensor(bu_mask)
+                if data.type() != bu_mask.type():
+                    data.add_(bu_mask.to(torch.int64))
+                else:
+                    data.add_(bu_mask)
 
     # 模型聚合函数agg
     # weight_accumulator 存储了每一个客户端的上传参数变化值/差值
@@ -94,10 +157,7 @@ class Server(object):
                 # 因为update_per_layer的type是floatTensor，所以将起转换为模型的LongTensor（有一定的精度损失）
                 data.add_(update_per_layer.to(torch.int64))
             else:
-                # print(name)
-                # print(data)
                 data.add_(update_per_layer)
-                # print(data)
 
     # 模型评估
     def model_eval(self):

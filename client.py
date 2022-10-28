@@ -14,6 +14,8 @@ class SecAggregator:
     def __init__(self, common_base, common_mod):
         # 从0-common_mod-1选择一个随机数作为私钥
         self.secretkey = randrange(common_mod)
+        if self.secretkey == 0:
+            self.secretkey = 1
         # 群的生成元
         self.base = common_base
         # 群的模数
@@ -49,8 +51,31 @@ class SecAggregator:
         # 定义随机数种子
         np.random.seed(seed)
         # 生成dim维度的向量
-        return np.float32(np.random.rand(self.dim))
-        # return np.float32(np.random.rand(self.dim[0], self.dim[1]))
+        if len(self.dim) == 0:
+            if self.weights.dtype == np.int64:
+                return np.int64(np.random.rand())
+            elif self.weights.dtype == np.float32:
+                return np.int64(np.random.rand())
+        elif len(self.dim) == 1:
+            if self.weights.dtype == np.int64:
+                return np.int64(np.random.rand(self.dim[0]))
+            elif self.weights.dtype == np.float32:
+                return np.float32(np.random.rand(self.dim[0]))
+        elif len(self.dim) == 2:
+            if self.weights.dtype == np.int64:
+                return np.int64(np.random.rand(self.dim[0], self.dim[1]))
+            elif self.weights.dtype == np.float32:
+                return np.float32(np.random.rand(self.dim[0], self.dim[1]))
+        elif len(self.dim) == 3:
+            if self.weights.dtype == np.int64:
+                return np.int64(np.random.rand(self.dim[0], self.dim[1], self.dim[2]))
+            elif self.weights.dtype == np.float32:
+                return np.float32(np.random.rand(self.dim[0], self.dim[1], self.dim[2]))
+        elif len(self.dim) == 4:
+            if self.weights.dtype == np.int64:
+                return np.int64(np.random.rand(self.dim[0], self.dim[1], self.dim[2], self.dim[3]))
+            elif self.weights.dtype == np.float32:
+                return np.float32(np.random.rand(self.dim[0], self.dim[1], self.dim[2], self.dim[3]))
 
     # 生成加入掩码之后的参数
     def prepare_weights(self, shared_keys, myid):
@@ -62,25 +87,12 @@ class SecAggregator:
             # 加掩码
             if sid > myid:
                 # shared_keys[sid] ** self.secretkey 生成公共密钥
-                print("1", myid, sid, (shared_keys[sid] ** self.secretkey) % self.mod)
                 wghts += self.generate_weights((shared_keys[sid] ** self.secretkey) % self.mod)
             elif sid < myid:
-                print("2", myid, sid, (shared_keys[sid] ** self.secretkey) % self.mod)
                 wghts -= self.generate_weights((shared_keys[sid] ** self.secretkey) % self.mod)
         # 加自己的掩码bu
         wghts += self.generate_weights(self.sndkey)
         return wghts
-
-    # 服务器如果没有收到某个客户端的梯度，就会自己生成掩码去unmask
-    def reveal(self, keylist):
-        wghts = np.zeros(self.dim)
-        for each in keylist:
-            print(each)
-            if each < self.id:
-                wghts -= self.generate_weights((self.keys[each] ** self.secretkey) % self.mod)
-            elif each > self.id:
-                wghts += self.generate_weights((self.keys[each] ** self.secretkey) % self.mod)
-        return -1 * wghts
 
     def private_secret(self):
         return self.generate_weights(self.sndkey)
@@ -91,7 +103,7 @@ class Client(object):
     def __init__(self, conf, model, train_dataset, id=-1):
 
         # 安全聚合
-        self.sec_agg = SecAggregator(3, 100103)
+        self.sec_agg = SecAggregator(2, 17)
         # 最小生成树结构
         self.part_connect_graph = []
         # 客户端列表
@@ -125,15 +137,17 @@ class Client(object):
         for i in range(n):
             key = k
             for j in range(t - 1):
-                key += params[j] * (i + 1)**(j+1)
+                key += params[j] * (i + 1) ** (j + 1)
             # key = key % self.sec_agg.mod
             part_key[self.client_list[i].client_id] = key
         return part_key
 
-    # 将份额传递给邻居
+    # 将自己的key和bu的份额传递给邻居
     def send_part_secretkey_bu_to_adj(self, msg):
+        # {self.client_id:{client_id:[key bu],...}}
         pass
 
+    # 将收到的其他客户端的份额传给服务器
     def send_shared_secretkey_bu_to_server(self):
         # send {self.client_id:self.client_shared_key_bu}
         pass
@@ -144,6 +158,8 @@ class Client(object):
     # 存储来自其他客户端的份额
     def store_shared_secretkey_bu(self, part_msg):
         for origin_id in part_msg:
+            if origin_id == self.client_id:
+                break
             for client_id in part_msg[origin_id]:
                 if client_id == self.client_id:
                     self.client_shared_key_bu[origin_id] = part_msg[origin_id][client_id]
@@ -159,7 +175,22 @@ class Client(object):
             part_secretkey_bu[client_id].append(part_secretkey[client_id])
             part_secretkey_bu[client_id].append(part_bu[client_id])
         self.client_shared_key_bu[self.client_id] = part_secretkey_bu[self.client_id]
-        self.send_partkey_to_adj({self.client_id: part_secretkey_bu})
+        # self.send_partkey_to_adj({self.client_id: part_secretkey_bu})
+        return {self.client_id: part_secretkey_bu}
+
+    def mask(self, diff):
+        shared_keys = {}
+        for client1, client2, cost in self.part_connect_graph:
+            if int(client1) == self.client_id:
+                shared_keys[int(client2)] = self.client_list[int(client2)-1].sec_agg.public_key()
+            if int(client2) == self.client_id:
+                shared_keys[int(client1)] = self.client_list[int(client1)-1].sec_agg.public_key()
+        for name in diff:
+            item = diff[name].detach().numpy()
+            dim = item.shape
+            self.sec_agg.set_weights(item, dim)
+            item = self.sec_agg.prepare_weights(shared_keys, self.client_id)
+            diff[name] = torch.tensor(item)
 
     # 计算时延
     def compute_communication_cost(self):
@@ -196,7 +227,8 @@ class Client(object):
         for name, data in self.local_model.state_dict().items():
             # 计算训练后与训练前的差值
             diff[name] = (data - model.state_dict()[name])
-            # print(type(diff[name]))
+            # print(name)
+            # print(data.dtype)
         # print(diff)
 
         return diff

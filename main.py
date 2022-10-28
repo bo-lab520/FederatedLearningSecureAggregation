@@ -1,5 +1,8 @@
-import random
+﻿import random
 
+import torch
+
+import models
 from client import *
 import datasets
 from CA import GraphStruct
@@ -37,7 +40,10 @@ if __name__ == '__main__':
     for e in range(conf["global_epochs"]):
         print("Global Epoch %d" % e)
         # 每次训练都是从clients列表中随机采样k个进行本轮训练
-        candidates = random.sample(clients, conf["k"])
+        # candidates = random.sample(clients, conf["k"])
+        candidates = []
+        for i in range(5):
+            candidates.append(clients[i])
         # 排序 按照id从小到大
         for i in range(len(candidates)):
             for j in range(i + 1, len(candidates)):
@@ -46,12 +52,13 @@ if __name__ == '__main__':
                     candidates[i] = candidates[j]
                     candidates[j] = temp
 
-        generate_graph.node_number = len(candidates)
         candidates_dict = {}
         for c in candidates:
             candidates_dict[c.client_id] = c
             c.client_list = candidates
         server.client_list = candidates
+
+        generate_graph.node_number = len(candidates)
 
         # 每个客户端把通信时延传给CA
         communication_cost = c.compute_communication_cost()
@@ -66,8 +73,13 @@ if __name__ == '__main__':
         server.part_connect_graph = generate_graph.part_connect_graph
 
         # t-out-of-n 分发bu和密钥
+        # for c in candidates:
+        #     c.shared_secretkey_bu()
+        # 手动分发(实验)
         for c in candidates:
-            c.shared_secretkey_bu()
+            shared = c.shared_secretkey_bu()
+            for _c in candidates:
+                _c.store_shared_secretkey_bu(shared)
 
         weight_accumulator = {}
         # torch.nn.Module模块中的state_dict变量存放训练过程中需要学习的权重和偏执系数，
@@ -81,28 +93,31 @@ if __name__ == '__main__':
             diff = c.local_train(server.global_model)
             # mask
             shared_keys = {}
-            for client1, client2, cost in c.part_connect_graph:
-                if int(client1) == c.client_id:
-                    shared_keys[client2] = candidates_dict[client2].sec_agg.public_key()
-                if int(client2) == c.client_id:
-                    shared_keys[client1] = candidates_dict[client1].sec_agg.public_key()
+            # for client1, client2, cost in c.part_connect_graph:
+            #     if int(client1) == c.client_id:
+            #         shared_keys[int(client2)] = candidates_dict[int(client2)].sec_agg.public_key()
+            #     if int(client2) == c.client_id:
+            #         shared_keys[int(client1)] = candidates_dict[int(client1)].sec_agg.public_key()
             for name in diff:
                 item = diff[name].detach().numpy()
                 dim = item.shape
-                c.sec_agg.set_weights(diff, dim)
-                c.sec_agg.prepare_weights(shared_keys, c.client_id)
+                c.sec_agg.set_weights(item, dim)
+                item = c.sec_agg.prepare_weights(shared_keys, c.client_id)
+                diff[name] = torch.tensor(item)
             # 模型反演攻击
             # ...
 
             # 根据客户端的参数差值字典更新总体权重
             for name, params in server.global_model.state_dict().items():
                 weight_accumulator[name].add_(diff[name])
-                # print(name)
-                # print(weight_accumulator[name])
 
         # 聚合
         server.model_aggregate(weight_accumulator)
         # unmask
+        # 手动收集(实验)
+        for c in candidates:
+            server.collect_shared_secretkey_bu({c.client_id: c.client_shared_key_bu})
+
         server.unmask()
         # 模型评估
         for name, params in server.global_model.state_dict().items():
@@ -111,8 +126,3 @@ if __name__ == '__main__':
         acc, loss = server.model_eval()
         print("Global Epoch %d, acc: %f, loss: %f\n" % (e, acc, loss))
 
-# for name, params in server.global_model.state_dict().items():
-#     print(name)
-#     print(params)
-#     np_param = params.detach().numpy()
-#     print(np_param)
