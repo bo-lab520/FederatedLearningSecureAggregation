@@ -107,9 +107,12 @@ class Client(object):
         # 最小生成树结构
         self.part_connect_graph = []
         # 客户端列表
+        self.client_dict = {}
         self.client_list = []
         # 参与训练的客户端私钥和bu的份额
         self.client_shared_key_bu = {}
+        # 存储其他客户端的公钥
+        self.client_pubkey = []
 
         self.conf = conf
         # 客户端本地模型(一般由服务器传输)
@@ -142,17 +145,47 @@ class Client(object):
             part_key[self.client_list[i].client_id] = key
         return part_key
 
-    # 将自己的key和bu的份额传递给邻居
-    def send_part_secretkey_bu_to_adj(self, msg):
-        # {self.client_id:{client_id:[key bu],...}}
+    def send(self, msg, ip, port):
         pass
+
+    # 将自己的key和bu的份额传递给邻居
+    def send_part_secretkey_bu_to_adj(self, part_secretkey_bu):
+        # {self.client_id:{client_id:[key bu],...}}
+        for client1, client2, cost in self.part_connect_graph:
+            if client1 == self.client_id:
+                self.send({self.client_id: part_secretkey_bu},
+                          self.conf["device"+client2+"_ip"],
+                          self.conf["device"+client2+"_port"])
+            if client2 == self.client_id:
+                self.send({self.client_id: part_secretkey_bu},
+                          self.conf["device" + client1 + "_ip"],
+                          self.conf["device" + client1 + "_port"])
+
+    # 将邻居发过来的key和bu的份额转发给其他邻居（广播）
+    def transmit_part_secretkey_bu_to_adj(self, part_msg, last_id):
+        for client1, client2, cost in self.part_connect_graph:
+            if client1 == self.client_id:
+                if client2 == last_id:
+                    pass
+                else:
+                    self.send({self.client_id: part_msg},
+                              self.client_dict[client2].ip,
+                              self.client_dict[client2].port)
+            if client2 == self.client_id:
+                if self.client_dict[client1].ip == last_id:
+                    pass
+                else:
+                    self.send({self.client_id: part_msg},
+                              self.client_dict[client1].ip,
+                              self.client_dict[client1].port)
 
     # 将收到的其他客户端的份额传给服务器
     def send_shared_secretkey_bu_to_server(self):
         # send {self.client_id:self.client_shared_key_bu}
-        pass
+        self.send({self.client_id: self.client_shared_key_bu}, "127.0.0.1", 8888)
 
     def receive_msg(self):
+
         pass
 
     # 存储来自其他客户端的份额
@@ -164,6 +197,14 @@ class Client(object):
                 if client_id == self.client_id:
                     self.client_shared_key_bu[origin_id] = part_msg[origin_id][client_id]
             break
+        # 转发
+        # for origin_id in part_msg:
+        #     self.transmit_part_secretkey_bu_to_adj(part_msg, last_id)
+        #     break
+
+    def store_pubkey(self, pubkey):
+        client_id = list(pubkey.keys())[0]
+        self.client_pubkey[client_id] = pubkey[client_id]
 
     # 分享私钥和bu
     def shared_secretkey_bu(self):
@@ -175,16 +216,17 @@ class Client(object):
             part_secretkey_bu[client_id].append(part_secretkey[client_id])
             part_secretkey_bu[client_id].append(part_bu[client_id])
         self.client_shared_key_bu[self.client_id] = part_secretkey_bu[self.client_id]
-        # self.send_partkey_to_adj({self.client_id: part_secretkey_bu})
+        # self.send_part_secretkey_bu_to_adj(part_secretkey_bu)
+        # 测试
         return {self.client_id: part_secretkey_bu}
 
     def mask(self, diff):
         shared_keys = {}
         for client1, client2, cost in self.part_connect_graph:
             if int(client1) == self.client_id:
-                shared_keys[int(client2)] = self.client_list[int(client2)-1].sec_agg.public_key()
+                shared_keys[int(client2)] = self.client_dict[int(client2)].sec_agg.public_key()
             if int(client2) == self.client_id:
-                shared_keys[int(client1)] = self.client_list[int(client1)-1].sec_agg.public_key()
+                shared_keys[int(client1)] = self.client_dict[int(client1)].sec_agg.public_key()
         for name in diff:
             item = diff[name].detach().numpy()
             dim = item.shape
@@ -227,34 +269,12 @@ class Client(object):
         for name, data in self.local_model.state_dict().items():
             # 计算训练后与训练前的差值
             diff[name] = (data - model.state_dict()[name])
-            # print(name)
-            # print(data.dtype)
-        # print(diff)
 
         return diff
 
 
-if __name__ == '__main__':
-    # a = torch.ones(3, dtype=torch.int32)
-    # print(a)
-    # b = a.detach().numpy()
-    # c = b.tobytes()
-    # d = bytes('name+type+dim+', "utf-8")+c
-    # print(d[5:])
-    # arr = d.split(b'+')
-    # print(arr)
-    # np_param = np.frombuffer(arr[3], dtype=np.int32).reshape((3,))
-    # print(np_param)
-    # print(torch.tensor(np_param))
 
-    # a = torch.tensor(1, dtype=torch.int32)
-    # print(a)
-    # b = a.detach().numpy()
-    # print(b.shape)
-    # c = b.tobytes()
-    # d = np.frombuffer(c, dtype=np.int32).reshape((0,))
-    # e = torch.tensor(d)
-    # print(e)
+if __name__ == '__main__':
 
     with open("./utils/conf.json", 'r') as f:
         conf = json.load(f)

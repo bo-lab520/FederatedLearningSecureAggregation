@@ -15,6 +15,7 @@ class Server(object):
         # 所有的客户端的secretkey和bu的份额
         self.all_part_secretkey_bu = {}
 
+        self.client_dict = {}
         self.client_list = []
 
         self.conf = conf
@@ -137,7 +138,6 @@ class Server(object):
                 item = data.detach().numpy()
                 dim = item.shape
                 _type = item.dtype
-                print(_type)
                 bu_mask = -self.conf["lambda"] * self.generate_weights(secretkey_bu[1], dim, _type)
                 bu_mask = torch.tensor(bu_mask)
                 if data.type() != bu_mask.type():

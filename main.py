@@ -1,11 +1,7 @@
-﻿import random
-
-import torch
-
-import models
-from client import *
+﻿from client import *
 import datasets
-from CA import GraphStruct
+from graph_struct import GraphStruct
+
 
 if __name__ == '__main__':
 
@@ -55,7 +51,10 @@ if __name__ == '__main__':
         candidates_dict = {}
         for c in candidates:
             candidates_dict[c.client_id] = c
+        for c in candidates:
+            c.client_dict = candidates_dict
             c.client_list = candidates
+        server.client_dict = candidates_dict
         server.client_list = candidates
 
         generate_graph.node_number = len(candidates)
@@ -92,24 +91,28 @@ if __name__ == '__main__':
         for c in candidates:
             diff = c.local_train(server.global_model)
             # mask
-            shared_keys = {}
-            # for client1, client2, cost in c.part_connect_graph:
-            #     if int(client1) == c.client_id:
-            #         shared_keys[int(client2)] = candidates_dict[int(client2)].sec_agg.public_key()
-            #     if int(client2) == c.client_id:
-            #         shared_keys[int(client1)] = candidates_dict[int(client1)].sec_agg.public_key()
-            for name in diff:
-                item = diff[name].detach().numpy()
-                dim = item.shape
-                c.sec_agg.set_weights(item, dim)
-                item = c.sec_agg.prepare_weights(shared_keys, c.client_id)
-                diff[name] = torch.tensor(item)
+            c.mask(diff)
+
             # 模型反演攻击
             # ...
 
             # 根据客户端的参数差值字典更新总体权重
             for name, params in server.global_model.state_dict().items():
                 weight_accumulator[name].add_(diff[name])
+
+        # 多线程聚合
+        # diffs = []
+        # for c in candidates:
+        #     diff = {}
+        #     diffs.append(diff)
+        #     t = threading.Thread(target=c.train_mask(server.global_model, diff))
+        #     t.start()
+        # while True:
+        #     if candidates[0].aggok and candidates[1].aggok and candidates[2].aggok and candidates[3].aggok and candidates[4].aggok:
+        #         break
+        # for c in candidates:
+        #     for name, params in server.global_model.state_dict().items():
+        #         weight_accumulator[name].add_(diffs[c.client_id-1][name])
 
         # 聚合
         server.model_aggregate(weight_accumulator)
@@ -120,9 +123,6 @@ if __name__ == '__main__':
 
         server.unmask()
         # 模型评估
-        for name, params in server.global_model.state_dict().items():
-            print(name)
-            print(params)
         acc, loss = server.model_eval()
         print("Global Epoch %d, acc: %f, loss: %f\n" % (e, acc, loss))
 

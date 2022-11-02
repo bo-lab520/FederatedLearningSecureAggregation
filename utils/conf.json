@@ -5,9 +5,9 @@
 	
 	"type" : "cifar",
 	
-	"global_epochs" : 1,
+	"global_epochs" : 3,
 	
-	"local_epochs" : 1,
+	"local_epochs" : 3,
 	
 	"k" : 5,
 	
@@ -17,5 +17,18 @@
 	
 	"momentum" : 0.0001,
 
-	"lambda" : 0.1
+	"lambda" : 0.1,
+
+	"edge_ip" : "127.0.0.1",
+	"edge_port" : 8080,
+	"device1_ip" : "127.0.0.1",
+	"device1_port" : 8001,
+	"device2_ip" : "127.0.0.1",
+	"device2_port" : 8002,
+	"device3_ip" : "127.0.0.1",
+	"device3_port" : 8003,
+	"device4_ip" : "127.0.0.1",
+	"device4_port" : 8004,
+	"device5_ip" : "127.0.0.1",
+	"device5_port" : 8005
 }
