@@ -1,7 +1,7 @@
 {
 	"model_name" : "resnet18",
 
-	"no_models" : 10,
+	"no_models" : 5,
 	
 	"type" : "cifar",
 	

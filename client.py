@@ -101,6 +101,7 @@ class SecAggregator:
 class Client(object):
 
     def __init__(self, conf, model, train_dataset, id=-1):
+        self.client_id = id
 
         # 安全聚合
         self.sec_agg = SecAggregator(2, 17)
@@ -112,20 +113,18 @@ class Client(object):
         # 参与训练的客户端私钥和bu的份额
         self.client_shared_key_bu = {}
         # 存储其他客户端的公钥
-        self.client_pubkey = []
+        self.client_pubkey = {self.client_id: self.sec_agg.pubkey}
 
         self.conf = conf
         # 客户端本地模型(一般由服务器传输)
         self.local_model = model
-
-        self.client_id = id
 
         self.train_dataset = train_dataset
 
         # 按ID对训练集合的拆分
         all_range = list(range(len(self.train_dataset)))
         data_len = int(len(self.train_dataset) / self.conf['no_models'])
-        train_indices = all_range[id * data_len: (id + 1) * data_len]
+        train_indices = all_range[int(id) * data_len: (int(id) + 1) * data_len]
 
         self.train_loader = DataLoader(self.train_dataset, batch_size=conf["batch_size"],
                                        sampler=sampler.SubsetRandomSampler(train_indices))
@@ -263,12 +262,15 @@ class Client(object):
                 # 更新参数
                 optimizer.step()
             # print(2)
-            print("Client%d Epoch %d done." % (self.client_id, e))
+            print("Client {} Epoch {} done.".format(self.client_id, e))
 
         diff = dict()
         for name, data in self.local_model.state_dict().items():
             # 计算训练后与训练前的差值
             diff[name] = (data - model.state_dict()[name])
+
+        # 加掩码
+        # self.mask(diff)
 
         return diff
 

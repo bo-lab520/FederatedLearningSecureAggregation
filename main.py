@@ -100,20 +100,6 @@ if __name__ == '__main__':
             for name, params in server.global_model.state_dict().items():
                 weight_accumulator[name].add_(diff[name])
 
-        # 多线程聚合
-        # diffs = []
-        # for c in candidates:
-        #     diff = {}
-        #     diffs.append(diff)
-        #     t = threading.Thread(target=c.train_mask(server.global_model, diff))
-        #     t.start()
-        # while True:
-        #     if candidates[0].aggok and candidates[1].aggok and candidates[2].aggok and candidates[3].aggok and candidates[4].aggok:
-        #         break
-        # for c in candidates:
-        #     for name, params in server.global_model.state_dict().items():
-        #         weight_accumulator[name].add_(diffs[c.client_id-1][name])
-
         # 聚合
         server.model_aggregate(weight_accumulator)
         # unmask

@@ -1,5 +1,6 @@
 import argparse
 import json
+import time
 
 import torch
 
@@ -10,8 +11,84 @@ import inspect
 
 import datasets
 from client import Client
+from client_communication import DeviceServerSocket
 from graph_struct import GraphStruct
 from server import Server
+
+global collect_nums
+collect_nums = 0
+
+
+def finish_step1(candidates):
+    while True:
+        is_finish = False
+        for i in range(len(candidates)):
+            if len(candidates[i].part_connect_graph) == 0:
+                break
+            if i == len(candidates) - 1:
+                is_finish = True
+        if is_finish:
+            break
+        time.sleep(1)
+
+
+def finish_step2(candidates):
+    while True:
+        is_finish = False
+        for i in range(len(candidates)):
+            if len(candidates[i].client_pubkey) < len(candidates):
+                break
+            if i == len(candidates) - 1:
+                is_finish = True
+        if is_finish:
+            break
+        time.sleep(1)
+
+
+def finish_step3(candidates):
+    while True:
+        is_finish = False
+        for i in range(len(candidates)):
+            if len(candidates[i].client_shared_key_bu) < len(candidates):
+                break
+            if i == len(candidates) - 1:
+                is_finish = True
+        if is_finish:
+            break
+        time.sleep(1)
+
+
+def finish_step4():
+    global collect_nums
+    while True:
+        if collect_nums == 5:
+            collect_nums = 0
+            break
+        time.sleep(1)
+
+
+def server_send(_ip, _port, _msg_signal, _msg_data):
+    _socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    _socket.connect((_ip, _port))
+    if type(_msg_signal) == str:
+        _socket.send(_msg_signal.encode('utf-8'))
+    elif type(_msg_signal) == list:
+        _socket.send(json.dumps(_msg_signal).encode('utf-8'))
+    elif type(_msg_signal) == dict:
+        _socket.send(json.dumps(_msg_signal).encode('utf-8'))
+    else:
+        pass
+    time.sleep(1)
+    if type(_msg_data) == str:
+        _socket.send(_msg_data.encode('utf-8'))
+    elif type(_msg_data) == list:
+        _socket.send(json.dumps(_msg_data).encode('utf-8'))
+    elif type(_msg_data) == dict:
+        _socket.send(json.dumps(_msg_data).encode('utf-8'))
+    else:
+        pass
+    time.sleep(1)
+    _socket.close()
 
 
 class NodeServerRecv(threading.Thread):
@@ -19,16 +96,22 @@ class NodeServerRecv(threading.Thread):
         super(NodeServerRecv, self).__init__()
         self.client_socket = _client_socket
         self.server = _server
+        self.signal = 0
 
     def run(self):
+        global collect_nums
         while True:
             _data = self.client_socket.recv(1024)
             # 客户端调用close终端tcp连接
             if _data == b'':
                 self.stop_thread()
-
-            data = json.loads(_data)
-            print(data)
+            elif _data == b'unmask':
+                self.signal = 1
+            else:
+                if self.signal == 1:
+                    data = json.loads(_data)
+                    self.server.collect_shared_secretkey_bu(data)
+                    collect_nums += 1
 
     def _async_raise(self, tid, exctype):
         tid = ctypes.c_long(tid)
@@ -45,8 +128,9 @@ class NodeServerRecv(threading.Thread):
         self._async_raise(self.ident, SystemExit)
 
 
-class NodeServerSocket:
+class NodeServerSocket(threading.Thread):
     def __init__(self, _ip, _port, _server):
+        super(NodeServerSocket, self).__init__()
         self.ip = _ip
         self.port = _port
         self.server = _server
@@ -57,45 +141,12 @@ class NodeServerSocket:
         self.socket.bind((self.ip, self.port))
         self.socket.listen(128)
 
+    def run(self):
         while True:
             server_socket, client_addr = self.socket.accept()
             serverrecv = NodeServerRecv(server_socket, self.server)
             serverrecv.start()
-            print("connect success...")
-
-
-class NodeClientSocket:
-    def __init__(self, _ip, _port, _client):
-        self.socket = None
-        self.ip = _ip
-        self.port = _port
-        self.client = _client
-        self.init()
-
-    def init(self):
-        self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.socket.connect((self.ip, self.port))
-
-    def send(self, msg):
-        msg_bytes = bytes(msg, "utf-8")
-        self.socket.send(msg_bytes)
-
-    def close(self):
-        self.socket.close()
-
-
-def server_send(_ip, _port, _msg):
-    _socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    _socket.connect((_ip, _port))
-    if type(_msg) == str:
-        _socket.send(_msg.encode('utf-8'))
-    elif type(_msg) == list:
-        _socket.send(json.dumps(_msg).encode('utf-8'))
-    elif type(_msg) == dict:
-        _socket.send(json.dumps(_msg).encode('utf-8'))
-    else:
-        pass
-    _socket.close()
+            print("edge connect success...")
 
 
 if __name__ == '__main__':
@@ -104,58 +155,76 @@ if __name__ == '__main__':
     parser.add_argument('--port', type=int, default=8080)
     args = parser.parse_args()
 
-    with open("../utils/conf.json", 'r') as f:
+    with open("utils/conf.json", 'r') as f:
         conf = json.load(f)
-    train_datasets, eval_datasets = datasets.get_dataset("../data/", conf["type"])
+    train_datasets, eval_datasets = datasets.get_dataset("data/", conf["type"])
+
+    # 启动服务器
     server = Server(conf, eval_datasets)
     node_server = NodeServerSocket(args.ip, args.port, server)
+    node_server.start()
 
     clients = []
     for c in range(conf["no_models"]):
         clients.append(Client(conf, server.global_model, train_datasets, str(c + 1)))
+    candidates = []
+    for i in range(conf["k"]):
+        candidates.append(clients[i])
+    candidates_dict = {}
+    for c in candidates:
+        candidates_dict[c.client_id] = c
+    for c in candidates:
+        c.client_dict = candidates_dict
+        c.client_list = candidates
+    server.client_dict = candidates_dict
+    server.client_list = candidates
+
     generate_graph = GraphStruct()
 
     for e in range(conf["global_epochs"]):
         print("Global Epoch %d" % e)
-        candidates = []
-        for i in range(5):
-            candidates.append(clients[i])
-        for i in range(len(candidates)):
-            for j in range(i + 1, len(candidates)):
-                if int(candidates[j].client_id) < int(candidates[i].client_id):
-                    temp = candidates[i]
-                    candidates[i] = candidates[j]
-                    candidates[j] = temp
-        candidates_dict = {}
-        for c in candidates:
-            candidates_dict[c.client_id] = c
-        for c in candidates:
-            c.client_dict = candidates_dict
-            c.client_list = candidates
-        server.client_dict = candidates_dict
-        server.client_list = candidates
 
-        generate_graph.node_number = len(candidates)
-        communication_cost = c.compute_communication_cost()
+        # 启动客户端
         for c in candidates:
-            generate_graph.communication_cost(communication_cost)
+            device_server = DeviceServerSocket(conf["device" + c.client_id + "_ip"],
+                                               conf["device" + c.client_id + "_port"],
+                                               c)
+            device_server.start()
+
+        # 客户端传输通信时延 服务器计算拓扑结构
+        # 计算...
+        generate_graph.communication_cost([])
         generate_graph.init_graph(candidates)
 
         # 将生成树拓扑结构发送给客户端
-        for i in range(5):
-            server_send(conf["device" + str(i + 1)] + "_ip", conf["device" + str(i + 1) + "_port"],
-                        "part connect graph")
-            server_send(conf["device"+str(i+1)]+"_ip", conf["device"+str(i+1)+"_port"],
+        print("下发拓扑图结构...")
+        for c in candidates:
+            server_send(conf["device" + c.client_id + "_ip"],
+                        conf["device" + c.client_id + "_port"],
+                        "part connect graph",
                         generate_graph.part_connect_graph)
+        finish_step1(candidates)
+        print("完成下发拓扑图结构...")
         # 广播公钥
-        for i in range(5):
-            server_send(conf["device" + str(i + 1)] + "_ip", conf["device" + str(i + 1) + "_port"],
-                        "advertise pubkey")
+        print("开始广播公钥...")
+        for c in candidates:
+            server_send(conf["device" + c.client_id + "_ip"],
+                        conf["device" + c.client_id + "_port"],
+                        "advertise pubkey", [])
+        finish_step2(candidates)
+        print("完成广播公钥...")
+
         # 共享密钥和bu
-        for i in range(5):
-            server_send(conf["device" + str(i + 1)] + "_ip", conf["device" + str(i + 1) + "_port"],
-                        "shared key")
-        # 开始联邦学习
+        print("开始共享密钥和bu...")
+        for c in candidates:
+            server_send(conf["device" + c.client_id + "_ip"],
+                        conf["device" + c.client_id + "_port"],
+                        "shared key", [])
+        finish_step3(candidates)
+        print("完成共享密钥和bu...")
+
+        # 联邦学习
+        print("开始联邦学习...")
         weight_accumulator = {}
         for name, params in server.global_model.state_dict().items():
             weight_accumulator[name] = torch.zeros_like(params)
@@ -164,9 +233,17 @@ if __name__ == '__main__':
             c.mask(diff)
             for name, params in server.global_model.state_dict().items():
                 weight_accumulator[name].add_(diff[name])
+
         server.model_aggregate(weight_accumulator)
+
+        # 消除掩码
         for c in candidates:
-            server.collect_shared_secretkey_bu({c.client_id: c.client_shared_key_bu})
+            server_send(conf["device" + c.client_id] + "_ip",
+                        conf["device" + c.client_id + "_port"],
+                        "unmask", [])
+        finish_step4()
+
         server.unmask()
+
         acc, loss = server.model_eval()
         print("Global Epoch %d, acc: %f, loss: %f\n" % (e, acc, loss))

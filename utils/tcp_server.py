@@ -3,6 +3,7 @@ import inspect
 import socket
 import threading
 import json
+import time
 
 
 class ClientRecv(threading.Thread):
@@ -19,7 +20,7 @@ class ClientRecv(threading.Thread):
 
             # data = json.loads(_data)
             data = _data.decode('utf-8')
-            print(type(data))
+            time.sleep(3)
             print(data)
 
     def _async_raise(self, tid, exctype):

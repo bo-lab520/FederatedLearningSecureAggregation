@@ -4,6 +4,7 @@ from heapq import heapify, heappop, heappush
 global cur_node_num
 cur_node_num = 0
 
+
 class GraphStruct(object):
     def __init__(self):
         self.node_number = 0
@@ -13,26 +14,32 @@ class GraphStruct(object):
         self.part_connect_graph = []
 
     def communication_cost(self, communication_cost):
-        global cur_node_num
-        cur_node_num += 1
-        if cur_node_num == self.node_number:
-            # 构造全连通图
-            # cost_graph = {}
-            # for client_cost in self.client_communication_cost:
-            #     for id1, id2, cost in client_cost:
-            #         cost_graph[id1+id2] = (id1, id2, cost)
-            # for item in cost_graph:
-            #     self.all_connect_graph.append(cost_graph[item])
-            edges = [("1", "2", 10), ("1", "3", 9), ("1", "4", 4), ("1", "5", 5),
-                     ("2", "3", 8), ("2", "4", 6), ("2", "5", 11),
-                     ("3", "4", 15), ("3", "5", 12),
-                     ("4", "5", 7)]
-            self.all_connect_graph = edges
-        else:
-            self.client_communication_cost.append(communication_cost)
+        # global cur_node_num
+        # cur_node_num += 1
+        # if cur_node_num == self.node_number:
+        #     # 构造全连通图
+        #     # cost_graph = {}
+        #     # for client_cost in self.client_communication_cost:
+        #     #     for id1, id2, cost in client_cost:
+        #     #         cost_graph[id1+id2] = (id1, id2, cost)
+        #     # for item in cost_graph:
+        #     #     self.all_connect_graph.append(cost_graph[item])
+        #     edges = [("1", "2", 10), ("1", "3", 9), ("1", "4", 4), ("1", "5", 5),
+        #              ("2", "3", 8), ("2", "4", 6), ("2", "5", 11),
+        #              ("3", "4", 15), ("3", "5", 12),
+        #              ("4", "5", 7)]
+        #     self.all_connect_graph = edges
+        # else:
+        #     self.client_communication_cost.append(communication_cost)
 
-    def generate_part_graph(self):
-        # 构造最小树
+        # test
+        edges = [("1", "2", 10), ("1", "3", 9), ("1", "4", 4), ("1", "5", 5),
+                 ("2", "3", 8), ("2", "4", 6), ("2", "5", 11),
+                 ("3", "4", 15), ("3", "5", 12),
+                 ("4", "5", 7)]
+        self.all_connect_graph = edges
+
+    def generate_mst_graph(self):
         element = defaultdict(list)
         for start, stop, weight in self.all_connect_graph:
             element[start].append((weight, start, stop))
@@ -54,11 +61,21 @@ class GraphStruct(object):
 
         return MST
 
+    def generate_random_graph(self):
+
+        return []
+
     def init_graph(self, candidates):
         # for c in candidates:
         #     self.nodes += str(c.client_id)
         self.nodes = '12345'
-        self.part_connect_graph = self.generate_part_graph()
+        # 最小生成树
+        self.part_connect_graph = self.generate_mst_graph()
+        # 全连通图
+        # self.part_connect_graph = self.all_connect_graph
+        # 随机图
+        # self.part_connect_graph = self.generate_random_graph()
+
 
 if __name__ == '__main__':
     g = GraphStruct()
