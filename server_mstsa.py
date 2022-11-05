@@ -11,7 +11,7 @@ import inspect
 
 import datasets
 from client import Client
-from client_communication import DeviceServerSocket
+from client_mstsa import DeviceServerSocket
 from graph_struct import GraphStruct
 from server import Server
 
@@ -164,35 +164,32 @@ if __name__ == '__main__':
     node_server = NodeServerSocket(args.ip, args.port, server)
     node_server.start()
 
-    clients = []
-    for c in range(conf["no_models"]):
-        clients.append(Client(conf, server.global_model, train_datasets, str(c + 1)))
-    candidates = []
+    device_servers = []
     for i in range(conf["k"]):
-        candidates.append(clients[i])
-    candidates_dict = {}
-    for c in candidates:
-        candidates_dict[c.client_id] = c
-    for c in candidates:
-        c.client_dict = candidates_dict
-        c.client_list = candidates
-    server.client_dict = candidates_dict
-    server.client_list = candidates
-
-    generate_graph = GraphStruct()
+        device_server = DeviceServerSocket(conf["device" + str(i + 1) + "_ip"],
+                                           conf["device" + str(i + 1) + "_port"])
+        device_server.start()
+        device_servers.append(device_server)
 
     for e in range(conf["global_epochs"]):
         print("Global Epoch %d" % e)
-
-        # 启动客户端
+        candidates = []
+        for i in range(conf["k"]):
+            c = Client(conf, server.global_model, train_datasets, str(i + 1))
+            candidates.append(c)
+            device_servers[i].set_client(c)
+        candidates_dict = {}
         for c in candidates:
-            device_server = DeviceServerSocket(conf["device" + c.client_id + "_ip"],
-                                               conf["device" + c.client_id + "_port"],
-                                               c)
-            device_server.start()
+            candidates_dict[c.client_id] = c
+        for c in candidates:
+            c.client_dict = candidates_dict
+            c.client_list = candidates
+        server.client_dict = candidates_dict
+        server.client_list = candidates
 
         # 客户端传输通信时延 服务器计算拓扑结构
         # 计算...
+        generate_graph = GraphStruct()
         generate_graph.communication_cost([])
         generate_graph.init_graph(candidates)
 
@@ -223,6 +220,8 @@ if __name__ == '__main__':
         finish_step3(candidates)
         print("完成共享密钥和bu...")
 
+        # for c in candidates:
+        #     print(c.sec_agg.secretkey, c.sec_agg.sndkey)
         # 联邦学习
         print("开始联邦学习...")
         weight_accumulator = {}
@@ -238,10 +237,14 @@ if __name__ == '__main__':
 
         # 消除掩码
         for c in candidates:
-            server_send(conf["device" + c.client_id] + "_ip",
+            server_send(conf["device" + c.client_id + "_ip"],
                         conf["device" + c.client_id + "_port"],
                         "unmask", [])
         finish_step4()
+
+        # for client_id in server.all_part_secretkey_bu:
+        #     secretkey_bu = server.reconstruct_secretkey_bu(3, server.all_part_secretkey_bu[client_id])
+        #     print(secretkey_bu)
 
         server.unmask()
 

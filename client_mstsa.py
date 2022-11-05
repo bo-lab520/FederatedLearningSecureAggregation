@@ -180,17 +180,20 @@ class DeviceServerRecv(threading.Thread):
 
 
 class DeviceServerSocket(threading.Thread):
-    def __init__(self, _ip, _port, _client):
+    def __init__(self, _ip, _port):
         super(DeviceServerSocket, self).__init__()
         self.ip = _ip
         self.port = _port
-        self.client = _client
+        self.client = None
         self.init()
 
     def init(self):
         self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.socket.bind((self.ip, self.port))
         self.socket.listen(128)
+
+    def set_client(self, _client):
+        self.client = _client
 
     def run(self):
         while True:

@@ -5,11 +5,13 @@
 	
 	"type" : "cifar",
 	
-	"global_epochs" : 3,
+	"global_epochs" : 1,
 	
-	"local_epochs" : 3,
+	"local_epochs" : 1,
 	
 	"k" : 5,
+
+	"t":3,
 	
 	"batch_size" : 32,
 	

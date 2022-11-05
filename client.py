@@ -144,49 +144,6 @@ class Client(object):
             part_key[self.client_list[i].client_id] = key
         return part_key
 
-    def send(self, msg, ip, port):
-        pass
-
-    # 将自己的key和bu的份额传递给邻居
-    def send_part_secretkey_bu_to_adj(self, part_secretkey_bu):
-        # {self.client_id:{client_id:[key bu],...}}
-        for client1, client2, cost in self.part_connect_graph:
-            if client1 == self.client_id:
-                self.send({self.client_id: part_secretkey_bu},
-                          self.conf["device"+client2+"_ip"],
-                          self.conf["device"+client2+"_port"])
-            if client2 == self.client_id:
-                self.send({self.client_id: part_secretkey_bu},
-                          self.conf["device" + client1 + "_ip"],
-                          self.conf["device" + client1 + "_port"])
-
-    # 将邻居发过来的key和bu的份额转发给其他邻居（广播）
-    def transmit_part_secretkey_bu_to_adj(self, part_msg, last_id):
-        for client1, client2, cost in self.part_connect_graph:
-            if client1 == self.client_id:
-                if client2 == last_id:
-                    pass
-                else:
-                    self.send({self.client_id: part_msg},
-                              self.client_dict[client2].ip,
-                              self.client_dict[client2].port)
-            if client2 == self.client_id:
-                if self.client_dict[client1].ip == last_id:
-                    pass
-                else:
-                    self.send({self.client_id: part_msg},
-                              self.client_dict[client1].ip,
-                              self.client_dict[client1].port)
-
-    # 将收到的其他客户端的份额传给服务器
-    def send_shared_secretkey_bu_to_server(self):
-        # send {self.client_id:self.client_shared_key_bu}
-        self.send({self.client_id: self.client_shared_key_bu}, "127.0.0.1", 8888)
-
-    def receive_msg(self):
-
-        pass
-
     # 存储来自其他客户端的份额
     def store_shared_secretkey_bu(self, part_msg):
         for origin_id in part_msg:
@@ -207,8 +164,8 @@ class Client(object):
 
     # 分享私钥和bu
     def shared_secretkey_bu(self):
-        part_secretkey = self.t_out_of_n(3, 5, self.sec_agg.secretkey)
-        part_bu = self.t_out_of_n(3, 5, self.sec_agg.sndkey)
+        part_secretkey = self.t_out_of_n(self.conf["t"], self.conf["k"], self.sec_agg.secretkey)
+        part_bu = self.t_out_of_n(self.conf["t"], self.conf["k"], self.sec_agg.sndkey)
         part_secretkey_bu = {}
         for client_id in part_secretkey:
             part_secretkey_bu[client_id] = []
@@ -222,10 +179,10 @@ class Client(object):
     def mask(self, diff):
         shared_keys = {}
         for client1, client2, cost in self.part_connect_graph:
-            if int(client1) == self.client_id:
-                shared_keys[int(client2)] = self.client_dict[int(client2)].sec_agg.public_key()
-            if int(client2) == self.client_id:
-                shared_keys[int(client1)] = self.client_dict[int(client1)].sec_agg.public_key()
+            if client1 == self.client_id:
+                shared_keys[client2] = self.client_pubkey[client2]
+            if client2 == self.client_id:
+                shared_keys[client1] = self.client_pubkey[client1]
         for name in diff:
             item = diff[name].detach().numpy()
             dim = item.shape

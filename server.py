@@ -132,7 +132,7 @@ class Server(object):
     def unmask(self):
         for client_id in self.all_part_secretkey_bu:
             # 重构key bu
-            secretkey_bu = self.reconstruct_secretkey_bu(3, self.all_part_secretkey_bu[client_id])
+            secretkey_bu = self.reconstruct_secretkey_bu(self.conf["t"], self.all_part_secretkey_bu[client_id])
             # 消除bu掩码
             for name, data in self.global_model.state_dict().items():
                 item = data.detach().numpy()
