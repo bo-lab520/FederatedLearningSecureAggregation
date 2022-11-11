@@ -11,7 +11,7 @@ import inspect
 
 import datasets
 from client import Client
-from client_sa import DeviceServerSocket
+from client_eflsas import DeviceServerSocket
 from graph import GraphStruct
 from server import Server
 
@@ -30,6 +30,7 @@ def finish_step1(candidates):
         if is_finish:
             break
         time.sleep(1)
+
 
 def finish_step2(candidates):
     while True:
@@ -90,20 +91,6 @@ def server_send(_ip, _port, _msg_signal, _msg_data):
     _socket.close()
 
 
-def transmit_part_secretkey_bu_to_client(conf, canditates, part_secretkey_bu):
-    for c in canditates:
-        server_send(conf["device" + c.client_id + "_ip"],
-                    conf["device" + c.client_id + "_port"],
-                    "transmit_part_secretkey_bu", part_secretkey_bu)
-
-
-def transmit_pubkey_to_client(conf, canditates, pubkey):
-    for c in canditates:
-        server_send(conf["device" + c.client_id + "_ip"],
-                    conf["device" + c.client_id + "_port"],
-                    "transmit_pubkey", pubkey)
-
-
 class NodeServerRecv(threading.Thread):
     def __init__(self, _client_socket, _server):
         super(NodeServerRecv, self).__init__()
@@ -120,23 +107,11 @@ class NodeServerRecv(threading.Thread):
                 self.stop_thread()
             elif _data == b'unmask':
                 self.signal = 1
-            elif _data == b'pubkey':
-                self.signal = 2
-            elif _data == b'part_secretkey_bu':
-                self.signal = 3
             else:
                 if self.signal == 1:
                     data = json.loads(_data)
                     self.server.collect_shared_secretkey_bu(data)
                     collect_nums += 1
-                elif self.signal == 2:
-                    data = json.loads(_data)
-                    transmit_pubkey_to_client(self.server.conf, self.server.client_list, data)
-                elif self.signal == 3:
-                    data = json.loads(_data)
-                    transmit_part_secretkey_bu_to_client(self.server.conf, self.server.client_list, data)
-                else:
-                    pass
 
     def _async_raise(self, tid, exctype):
         tid = ctypes.c_long(tid)
@@ -201,7 +176,6 @@ if __name__ == '__main__':
 
     for e in range(conf["global_epochs"]):
         print("Global Epoch %d" % e)
-
         candidates = []
         for i in range(conf["k"]):
             c = Client(conf, server.global_model, train_datasets, str(i + 1))
@@ -216,7 +190,9 @@ if __name__ == '__main__':
         server.client_dict = candidates_dict
         server.client_list = candidates
 
-        generate_graph = GraphStruct(1)
+        # 客户端传输通信时延 服务器计算拓扑结构
+        # 计算...
+        generate_graph = GraphStruct(3)
         generate_graph.communication_cost([])
         generate_graph.init_graph(candidates)
 

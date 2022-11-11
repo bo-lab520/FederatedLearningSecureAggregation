@@ -1,3 +1,5 @@
+import random
+import time
 from collections import defaultdict
 from heapq import heapify, heappop, heappush
 
@@ -6,12 +8,13 @@ cur_node_num = 0
 
 
 class GraphStruct(object):
-    def __init__(self):
+    def __init__(self, _class):
         self.node_number = 0
         self.client_communication_cost = []
         self.nodes = ''
         self.all_connect_graph = []
         self.part_connect_graph = []
+        self._class = _class
 
     def communication_cost(self, communication_cost):
         # global cur_node_num
@@ -48,7 +51,6 @@ class GraphStruct(object):
         used_nodes = set(self.nodes[0])
         usable_edges = element[self.nodes[0]][:]
         heapify(usable_edges)
-        # 建立最小堆
         MST = []
         while usable_edges and (all_nodes - used_nodes):
             weight, start, stop = heappop(usable_edges)
@@ -62,22 +64,47 @@ class GraphStruct(object):
         return MST
 
     def generate_random_graph(self):
-
-        return []
+        random_graph = []
+        while True:
+            node_t = {}
+            for _id in self.nodes:
+                node_t[_id] = 0
+            for e in self.all_connect_graph:
+                if random.random() < 0.7:
+                    random_graph.append(e)
+                    node_t[e[0]] += 1
+                    node_t[e[1]] += 1
+                else:
+                    continue
+            is_success = False
+            for _id in self.nodes:
+                if node_t[_id] < 3:
+                    break
+                if _id == '5':
+                    is_success = True
+            if is_success:
+                break
+            time.sleep(1)
+            random_graph = []
+        return random_graph
 
     def init_graph(self, candidates):
         # for c in candidates:
         #     self.nodes += str(c.client_id)
         self.nodes = '12345'
-        # 最小生成树
-        self.part_connect_graph = self.generate_mst_graph()
-        # 全连通图
-        # self.part_connect_graph = self.all_connect_graph
-        # 随机图
-        # self.part_connect_graph = self.generate_random_graph()
+        if self._class == 1:
+            # 全连通图
+            self.part_connect_graph = self.all_connect_graph
+        elif self._class == 2:
+            # 随机图
+            self.part_connect_graph = self.generate_random_graph()
+        else:
+            # 最小生成树
+            self.part_connect_graph = self.generate_mst_graph()
 
 
 if __name__ == '__main__':
     g = GraphStruct()
+    g.communication_cost([])
     g.init_graph([])
     print(g.part_connect_graph)

@@ -11,12 +11,15 @@ import inspect
 
 import datasets
 from client import Client
-from client_mstsa import DeviceServerSocket
-from graph_struct import GraphStruct
+from client_ccesa import DeviceServerSocket
+from graph import GraphStruct
 from server import Server
 
 global collect_nums
 collect_nums = 0
+
+with open("utils/conf.json", 'r') as f:
+    conf = json.load(f)
 
 
 def finish_step1(candidates):
@@ -35,10 +38,16 @@ def finish_step1(candidates):
 def finish_step2(candidates):
     while True:
         is_finish = False
-        for i in range(len(candidates)):
-            if len(candidates[i].client_pubkey) < len(candidates):
+        for c in candidates:
+            neighbors = 1
+            for client1, client2, cost in server.part_connect_graph:
+                if client1 == c.client_id:
+                    neighbors += 1
+                if client2 == c.client_id:
+                    neighbors += 1
+            if len(c.client_pubkey) < neighbors:
                 break
-            if i == len(candidates) - 1:
+            if c.client_id == "5":
                 is_finish = True
         if is_finish:
             break
@@ -48,10 +57,16 @@ def finish_step2(candidates):
 def finish_step3(candidates):
     while True:
         is_finish = False
-        for i in range(len(candidates)):
-            if len(candidates[i].client_shared_key_bu) < len(candidates):
+        for c in candidates:
+            neighbors = 1
+            for client1, client2, cost in server.part_connect_graph:
+                if client1 == c.client_id:
+                    neighbors += 1
+                if client2 == c.client_id:
+                    neighbors += 1
+            if len(c.client_shared_key_bu) < neighbors:
                 break
-            if i == len(candidates) - 1:
+            if c.client_id == "5":
                 is_finish = True
         if is_finish:
             break
@@ -61,7 +76,7 @@ def finish_step3(candidates):
 def finish_step4():
     global collect_nums
     while True:
-        if collect_nums == 5:
+        if collect_nums == conf["k"]:
             collect_nums = 0
             break
         time.sleep(1)
@@ -91,6 +106,32 @@ def server_send(_ip, _port, _msg_signal, _msg_data):
     _socket.close()
 
 
+def transmit_part_secretkey_bu_to_client(server, part_secretkey_bu):
+    origin_id = list(part_secretkey_bu.keys())[0]
+    for client1, client2, cost in server.part_connect_graph:
+        if client1 == origin_id:
+            server_send(conf["device" + client2 + "_ip"],
+                        conf["device" + client2 + "_port"],
+                        "transmit_part_secretkey_bu", part_secretkey_bu)
+        if client2 == origin_id:
+            server_send(conf["device" + client1 + "_ip"],
+                        conf["device" + client1 + "_port"],
+                        "transmit_part_secretkey_bu", part_secretkey_bu)
+
+
+def transmit_pubkey_to_client(server, pubkey):
+    origin_id = list(pubkey.keys())[0]
+    for client1, client2, cost in server.part_connect_graph:
+        if client1 == origin_id:
+            server_send(conf["device" + client2 + "_ip"],
+                        conf["device" + client2 + "_port"],
+                        "transmit_pubkey", pubkey)
+        if client2 == origin_id:
+            server_send(conf["device" + client1 + "_ip"],
+                        conf["device" + client1 + "_port"],
+                        "transmit_pubkey", pubkey)
+
+
 class NodeServerRecv(threading.Thread):
     def __init__(self, _client_socket, _server):
         super(NodeServerRecv, self).__init__()
@@ -107,11 +148,23 @@ class NodeServerRecv(threading.Thread):
                 self.stop_thread()
             elif _data == b'unmask':
                 self.signal = 1
+            elif _data == b'pubkey':
+                self.signal = 2
+            elif _data == b'part_secretkey_bu':
+                self.signal = 3
             else:
                 if self.signal == 1:
                     data = json.loads(_data)
                     self.server.collect_shared_secretkey_bu(data)
                     collect_nums += 1
+                elif self.signal == 2:
+                    data = json.loads(_data)
+                    transmit_pubkey_to_client(self.server, data)
+                elif self.signal == 3:
+                    data = json.loads(_data)
+                    transmit_part_secretkey_bu_to_client(self.server, data)
+                else:
+                    pass
 
     def _async_raise(self, tid, exctype):
         tid = ctypes.c_long(tid)
@@ -150,13 +203,14 @@ class NodeServerSocket(threading.Thread):
 
 
 if __name__ == '__main__':
+
+    start_time = time.time()
+
     parser = argparse.ArgumentParser()
     parser.add_argument('--ip', type=str, default='127.0.0.1')
     parser.add_argument('--port', type=int, default=8080)
     args = parser.parse_args()
 
-    with open("utils/conf.json", 'r') as f:
-        conf = json.load(f)
     train_datasets, eval_datasets = datasets.get_dataset("data/", conf["type"])
 
     # 启动服务器
@@ -173,6 +227,7 @@ if __name__ == '__main__':
 
     for e in range(conf["global_epochs"]):
         print("Global Epoch %d" % e)
+
         candidates = []
         for i in range(conf["k"]):
             c = Client(conf, server.global_model, train_datasets, str(i + 1))
@@ -187,14 +242,13 @@ if __name__ == '__main__':
         server.client_dict = candidates_dict
         server.client_list = candidates
 
-        # 客户端传输通信时延 服务器计算拓扑结构
-        # 计算...
-        generate_graph = GraphStruct()
+        generate_graph = GraphStruct(2)
         generate_graph.communication_cost([])
         generate_graph.init_graph(candidates)
 
         # 将生成树拓扑结构发送给客户端
         print("下发拓扑图结构...")
+        server.part_connect_graph = generate_graph.part_connect_graph
         for c in candidates:
             server_send(conf["device" + c.client_id + "_ip"],
                         conf["device" + c.client_id + "_port"],
@@ -221,8 +275,17 @@ if __name__ == '__main__':
         print("完成共享密钥和bu...")
 
         # for c in candidates:
-        #     print(c.sec_agg.secretkey, c.sec_agg.sndkey)
-        # 联邦学习
+        #     server_send(conf["device" + c.client_id + "_ip"],
+        #                 conf["device" + c.client_id + "_port"],
+        #                 "unmask", [])
+        # print("------原始数据------")
+        # for c in candidates:
+        #     print(c.client_id, c.sec_agg.secretkey, c.sec_agg.sndkey)
+        # print("------重构数据------")
+        # for client_id in server.all_part_secretkey_bu:
+        #     secretkey_bu = server.reconstruct_secretkey_bu(server.conf["t"], server.all_part_secretkey_bu[client_id])
+        #     print(client_id, secretkey_bu[0], secretkey_bu[1])
+
         print("开始联邦学习...")
         weight_accumulator = {}
         for name, params in server.global_model.state_dict().items():
@@ -242,11 +305,17 @@ if __name__ == '__main__':
                         "unmask", [])
         finish_step4()
 
-        # for client_id in server.all_part_secretkey_bu:
-        #     secretkey_bu = server.reconstruct_secretkey_bu(3, server.all_part_secretkey_bu[client_id])
-        #     print(secretkey_bu)
-
         server.unmask()
 
         acc, loss = server.model_eval()
         print("Global Epoch %d, acc: %f, loss: %f\n" % (e, acc, loss))
+
+        # clean server
+        server.part_connect_graph = []
+        server.all_part_secretkey_bu = {}
+        server.client_dict = {}
+        server.client_list = []
+
+    end_time = time.time()
+    run_time = end_time - start_time
+    print(run_time)

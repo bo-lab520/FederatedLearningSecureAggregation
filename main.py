@@ -1,6 +1,6 @@
 ﻿from client import *
 import datasets
-from graph_struct import GraphStruct
+from graph import GraphStruct
 
 
 if __name__ == '__main__':

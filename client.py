@@ -173,7 +173,6 @@ class Client(object):
             part_secretkey_bu[client_id].append(part_bu[client_id])
         self.client_shared_key_bu[self.client_id] = part_secretkey_bu[self.client_id]
         # self.send_part_secretkey_bu_to_adj(part_secretkey_bu)
-        # 测试
         return {self.client_id: part_secretkey_bu}
 
     def mask(self, diff):
@@ -184,11 +183,13 @@ class Client(object):
             if client2 == self.client_id:
                 shared_keys[client1] = self.client_pubkey[client1]
         for name in diff:
-            item = diff[name].detach().numpy()
-            dim = item.shape
-            self.sec_agg.set_weights(item, dim)
-            item = self.sec_agg.prepare_weights(shared_keys, self.client_id)
-            diff[name] = torch.tensor(item)
+            # item = diff[name].detach().numpy()
+            item = diff[name]
+            _item = item.detach().numpy()
+            dim = _item.shape
+            self.sec_agg.set_weights(_item, dim)
+            _item = self.sec_agg.prepare_weights(shared_keys, self.client_id)
+            diff[name] = torch.tensor(_item)
 
     # 计算时延
     def compute_communication_cost(self):

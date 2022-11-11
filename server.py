@@ -50,8 +50,10 @@ class Server(object):
         if len(client_shared_key_bu) >= t:
             y_bu = []
             y_secretkey = []
+            id_list = []
             for item in client_shared_key_bu:
                 _id = list(item.keys())[0]
+                id_list.append(_id)
                 # [secretkey, bu]
                 y_secretkey.append(item[_id][0])
                 y_bu.append(item[_id][1])
@@ -59,8 +61,8 @@ class Server(object):
             for i in range(t):
                 a = [1]
                 for j in range(t - 1):
-                    # a.append(((i + 1) ** (j + 1)) % mod)
-                    a.append((i + 1) ** (j + 1))
+                    # a.append((i + 1) ** (j + 1))
+                    a.append(int(id_list[i]) ** (j + 1))
                 A.append(a)
             A_bu = []
             A_secretkey = []
@@ -135,7 +137,8 @@ class Server(object):
             secretkey_bu = self.reconstruct_secretkey_bu(self.conf["t"], self.all_part_secretkey_bu[client_id])
             # 消除bu掩码
             for name, data in self.global_model.state_dict().items():
-                item = data.detach().numpy()
+                _data = data
+                item = _data.detach().numpy()
                 dim = item.shape
                 _type = item.dtype
                 bu_mask = -self.conf["lambda"] * self.generate_weights(secretkey_bu[1], dim, _type)
