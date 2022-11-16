@@ -21,7 +21,7 @@ def client_send(_ip, _port, _msg_signal, _msg_data):
         _socket.send(json.dumps(_msg_signal).encode('utf-8'))
     else:
         pass
-    time.sleep(1)
+    time.sleep(0.5)
     if type(_msg_data) == str:
         _socket.send(_msg_data.encode('utf-8'))
     elif type(_msg_data) == list:
@@ -30,7 +30,7 @@ def client_send(_ip, _port, _msg_signal, _msg_data):
         _socket.send(json.dumps(_msg_data).encode('utf-8'))
     else:
         pass
-    time.sleep(1)
+    time.sleep(0.5)
     _socket.close()
 
 

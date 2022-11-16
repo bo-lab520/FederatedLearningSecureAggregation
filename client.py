@@ -47,37 +47,63 @@ class SecAggregator:
         self.pubkey = (self.base ** self.secretkey) % self.mod
 
     # 生成噪声张量（加噪声） PRG伪随机生成器，seed一样，随机向量也一样
-    def generate_weights(self, seed):
-        # 定义随机数种子
-        np.random.seed(seed)
-        # 生成dim维度的向量
-        if len(self.dim) == 0:
-            if self.weights.dtype == np.int64:
-                return np.int64(np.random.rand())
-            elif self.weights.dtype == np.float32:
-                return np.int64(np.random.rand())
-        elif len(self.dim) == 1:
-            if self.weights.dtype == np.int64:
-                return np.int64(np.random.rand(self.dim[0]))
-            elif self.weights.dtype == np.float32:
-                return np.float32(np.random.rand(self.dim[0]))
-        elif len(self.dim) == 2:
-            if self.weights.dtype == np.int64:
-                return np.int64(np.random.rand(self.dim[0], self.dim[1]))
-            elif self.weights.dtype == np.float32:
-                return np.float32(np.random.rand(self.dim[0], self.dim[1]))
-        elif len(self.dim) == 3:
-            if self.weights.dtype == np.int64:
-                return np.int64(np.random.rand(self.dim[0], self.dim[1], self.dim[2]))
-            elif self.weights.dtype == np.float32:
-                return np.float32(np.random.rand(self.dim[0], self.dim[1], self.dim[2]))
-        elif len(self.dim) == 4:
-            if self.weights.dtype == np.int64:
-                return np.int64(np.random.rand(self.dim[0], self.dim[1], self.dim[2], self.dim[3]))
-            elif self.weights.dtype == np.float32:
-                return np.float32(np.random.rand(self.dim[0], self.dim[1], self.dim[2], self.dim[3]))
+    # def generate_weights(self, seed):
+    #     # 定义随机数种子
+    #     np.random.seed(seed)
+    #     # 生成dim维度的向量
+    #     if len(self.dim) == 0:
+    #         if self.weights.dtype == np.int64:
+    #             return np.int64(np.random.rand())
+    #         elif self.weights.dtype == np.float32:
+    #             return np.int64(np.random.rand())
+    #     elif len(self.dim) == 1:
+    #         if self.weights.dtype == np.int64:
+    #             return np.int64(np.random.rand(self.dim[0]))
+    #         elif self.weights.dtype == np.float32:
+    #             return np.float32(np.random.rand(self.dim[0]))
+    #     elif len(self.dim) == 2:
+    #         if self.weights.dtype == np.int64:
+    #             return np.int64(np.random.rand(self.dim[0], self.dim[1]))
+    #         elif self.weights.dtype == np.float32:
+    #             return np.float32(np.random.rand(self.dim[0], self.dim[1]))
+    #     elif len(self.dim) == 3:
+    #         if self.weights.dtype == np.int64:
+    #             return np.int64(np.random.rand(self.dim[0], self.dim[1], self.dim[2]))
+    #         elif self.weights.dtype == np.float32:
+    #             return np.float32(np.random.rand(self.dim[0], self.dim[1], self.dim[2]))
+    #     elif len(self.dim) == 4:
+    #         if self.weights.dtype == np.int64:
+    #             return np.int64(np.random.rand(self.dim[0], self.dim[1], self.dim[2], self.dim[3]))
+    #         elif self.weights.dtype == np.float32:
+    #             return np.float32(np.random.rand(self.dim[0], self.dim[1], self.dim[2], self.dim[3]))
 
     # 生成加入掩码之后的参数
+
+    def generate_weights(self, seed):
+        torch.manual_seed(seed)
+        if len(self.dim) == 0:
+            return torch.tensor(0)
+        elif len(self.dim) == 1:
+            if self.weights.dtype == torch.int64:
+                return torch.randn((self.dim[0]))
+            elif self.weights.dtype == torch.float32:
+                return torch.randn((self.dim[0]), dtype=torch.float32)
+        elif len(self.dim) == 2:
+            if self.weights.dtype == torch.int64:
+                return torch.randn((self.dim[0], self.dim[1]))
+            elif self.weights.dtype == torch.float32:
+                return torch.randn((self.dim[0], self.dim[1]), dtype=torch.float32)
+        elif len(self.dim) == 3:
+            if self.weights.dtype == torch.int64:
+                return torch.randn((self.dim[0], self.dim[1], self.dim[2]))
+            elif self.weights.dtype == torch.float32:
+                return torch.randn((self.dim[0], self.dim[1], self.dim[2]), dtype=torch.float32)
+        elif len(self.dim) == 4:
+            if self.weights.dtype == torch.int64:
+                return torch.randn((self.dim[0], self.dim[1], self.dim[2], self.dim[3]))
+            elif self.weights.dtype == torch.float32:
+                return torch.randn((self.dim[0], self.dim[1], self.dim[2], self.dim[3]), dtype=torch.float32)
+
     def prepare_weights(self, shared_keys, myid):
         # 其他客户端的公钥
         self.keys = shared_keys
@@ -182,14 +208,20 @@ class Client(object):
                 shared_keys[client2] = self.client_pubkey[client2]
             if client2 == self.client_id:
                 shared_keys[client1] = self.client_pubkey[client1]
+        # for name in diff:
+        #     # item = diff[name].detach().numpy()
+        #     item = diff[name]
+        #     _item = item.detach().numpy()
+        #     dim = _item.shape
+        #     self.sec_agg.set_weights(_item, dim)
+        #     _item = self.sec_agg.prepare_weights(shared_keys, self.client_id)
+        #     diff[name] = torch.tensor(_item)
         for name in diff:
-            # item = diff[name].detach().numpy()
             item = diff[name]
-            _item = item.detach().numpy()
-            dim = _item.shape
-            self.sec_agg.set_weights(_item, dim)
+            dim = item.shape
+            self.sec_agg.set_weights(item, dim)
             _item = self.sec_agg.prepare_weights(shared_keys, self.client_id)
-            diff[name] = torch.tensor(_item)
+            diff[name] = _item
 
     # 计算时延
     def compute_communication_cost(self):
@@ -213,9 +245,13 @@ class Client(object):
                     data = data.cuda()
                     target = target.cuda()
 
+                # 更新梯度
                 optimizer.zero_grad()
+                # 前向传播
                 output = self.local_model(data)
+                # 计算损失值
                 loss = torch.nn.functional.cross_entropy(output, target)
+                # 反向传播
                 loss.backward()
                 # 更新参数
                 optimizer.step()

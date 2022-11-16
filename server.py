@@ -91,35 +91,60 @@ class Server(object):
         return []
 
     # 生成噪声张量（加噪声） PRG伪随机生成器，seed一样，随机向量也一样
+    # def generate_weights(self, seed, dim, _type):
+    #     # 定义随机数种子
+    #     np.random.seed(seed)
+    #     # 生成dim维度的向量
+    #     if len(dim) == 0:
+    #         if _type == np.int64:
+    #             return np.int64(np.random.rand())
+    #         if _type == np.float32:
+    #             return np.int64(np.random.rand())
+    #     if len(dim) == 1:
+    #         if _type == np.int64:
+    #             return np.int64(np.random.rand(dim[0]))
+    #         if _type == np.float32:
+    #             return np.float32(np.random.rand(dim[0]))
+    #     if len(dim) == 2:
+    #         if _type == np.int64:
+    #             return np.int64(np.random.rand(dim[0], dim[1]))
+    #         if _type == np.float32:
+    #             return np.float32(np.random.rand(dim[0], dim[1]))
+    #     if len(dim) == 3:
+    #         if _type == np.int64:
+    #             return np.int64(np.random.rand(dim[0], dim[1], dim[2]))
+    #         if _type == np.float32:
+    #             return np.float32(np.random.rand(dim[0], dim[1], dim[2]))
+    #     if len(dim) == 4:
+    #         if _type == np.int64:
+    #             return np.int64(np.random.rand(dim[0], dim[1], dim[2], dim[3]))
+    #         if _type == np.float32:
+    #             return np.float32(np.random.rand(dim[0], dim[1], dim[2], dim[3]))
+
     def generate_weights(self, seed, dim, _type):
-        # 定义随机数种子
-        np.random.seed(seed)
-        # 生成dim维度的向量
+        torch.manual_seed(seed)
         if len(dim) == 0:
-            if _type == np.int64:
-                return np.int64(np.random.rand())
-            if _type == np.float32:
-                return np.int64(np.random.rand())
-        if len(dim) == 1:
-            if _type == np.int64:
-                return np.int64(np.random.rand(dim[0]))
-            if _type == np.float32:
-                return np.float32(np.random.rand(dim[0]))
-        if len(dim) == 2:
-            if _type == np.int64:
-                return np.int64(np.random.rand(dim[0], dim[1]))
-            if _type == np.float32:
-                return np.float32(np.random.rand(dim[0], dim[1]))
-        if len(dim) == 3:
-            if _type == np.int64:
-                return np.int64(np.random.rand(dim[0], dim[1], dim[2]))
-            if _type == np.float32:
-                return np.float32(np.random.rand(dim[0], dim[1], dim[2]))
-        if len(dim) == 4:
-            if _type == np.int64:
-                return np.int64(np.random.rand(dim[0], dim[1], dim[2], dim[3]))
-            if _type == np.float32:
-                return np.float32(np.random.rand(dim[0], dim[1], dim[2], dim[3]))
+            return torch.tensor(0)
+        elif len(dim) == 1:
+            if _type == torch.int64:
+                return torch.randn(dim[0])
+            elif _type == torch.float32:
+                return torch.randn(dim[0], dtype=torch.float32)
+        elif len(dim) == 2:
+            if _type == torch.int64:
+                return torch.randn((dim[0], dim[1]))
+            elif _type == torch.float32:
+                return torch.randn((dim[0], dim[1]), dtype=torch.float32)
+        elif len(dim) == 3:
+            if _type == torch.int64:
+                return torch.randn((dim[0], dim[1], dim[2]))
+            elif _type == torch.float32:
+                return torch.randn((dim[0], dim[1], dim[2]), dtype=torch.float32)
+        elif len(dim) == 4:
+            if _type == torch.int64:
+                return torch.randn((dim[0], dim[1], dim[2], dim[3]))
+            elif _type == torch.float32:
+                return torch.randn((dim[0], dim[1], dim[2], dim[3]), dtype=torch.float32)
 
     # 服务器如果没有收到某个客户端的梯度，就会自己生成掩码去unmask
     def reveal(self, keylist):
@@ -138,11 +163,9 @@ class Server(object):
             # 消除bu掩码
             for name, data in self.global_model.state_dict().items():
                 _data = data
-                item = _data.detach().numpy()
-                dim = item.shape
-                _type = item.dtype
+                dim = _data.shape
+                _type = _data.dtype
                 bu_mask = -self.conf["lambda"] * self.generate_weights(secretkey_bu[1], dim, _type)
-                bu_mask = torch.tensor(bu_mask)
                 if data.type() != bu_mask.type():
                     data.add_(bu_mask.to(torch.int64))
                 else:

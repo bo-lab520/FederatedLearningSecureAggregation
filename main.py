@@ -30,7 +30,7 @@ if __name__ == '__main__':
         clients.append(Client(conf, server.global_model, train_datasets, c + 1))
 
     # 生成图
-    generate_graph = GraphStruct()
+    # generate_graph = GraphStruct()
 
     # 全局模型训练，全局迭代次数 conf["global_epochs"]
     for e in range(conf["global_epochs"]):
@@ -57,28 +57,28 @@ if __name__ == '__main__':
         server.client_dict = candidates_dict
         server.client_list = candidates
 
-        generate_graph.node_number = len(candidates)
-
-        # 每个客户端把通信时延传给CA
-        communication_cost = c.compute_communication_cost()
-        for c in candidates:
-            generate_graph.communication_cost(communication_cost)
-        # 求解局部连接图(最小生成树)
-        generate_graph.init_graph(candidates)
+        # generate_graph.node_number = len(candidates)
+        #
+        # # 每个客户端把通信时延传给CA
+        # communication_cost = c.compute_communication_cost()
+        # for c in candidates:
+        #     generate_graph.communication_cost(communication_cost)
+        # # 求解局部连接图(最小生成树)
+        # generate_graph.init_graph(candidates)
 
         # wait... 当CA将最小生成树返回给各个客户端和服务器时，继续执行
-        for c in candidates:
-            c.part_connect_graph = generate_graph.part_connect_graph
-        server.part_connect_graph = generate_graph.part_connect_graph
-
-        # t-out-of-n 分发bu和密钥
+        # for c in candidates:
+        #     c.part_connect_graph = generate_graph.part_connect_graph
+        # server.part_connect_graph = generate_graph.part_connect_graph
+        #
+        # # t-out-of-n 分发bu和密钥
         # for c in candidates:
         #     c.shared_secretkey_bu()
         # 手动分发(实验)
-        for c in candidates:
-            shared = c.shared_secretkey_bu()
-            for _c in candidates:
-                _c.store_shared_secretkey_bu(shared)
+        # for c in candidates:
+        #     shared = c.shared_secretkey_bu()
+        #     for _c in candidates:
+        #         _c.store_shared_secretkey_bu(shared)
 
         weight_accumulator = {}
         # torch.nn.Module模块中的state_dict变量存放训练过程中需要学习的权重和偏执系数，
@@ -91,7 +91,7 @@ if __name__ == '__main__':
         for c in candidates:
             diff = c.local_train(server.global_model)
             # mask
-            c.mask(diff)
+            # c.mask(diff)
 
             # 模型反演攻击
             # ...
@@ -104,10 +104,10 @@ if __name__ == '__main__':
         server.model_aggregate(weight_accumulator)
         # unmask
         # 手动收集(实验)
-        for c in candidates:
-            server.collect_shared_secretkey_bu({c.client_id: c.client_shared_key_bu})
+        # for c in candidates:
+        #     server.collect_shared_secretkey_bu({c.client_id: c.client_shared_key_bu})
 
-        server.unmask()
+        # server.unmask()
         # 模型评估
         acc, loss = server.model_eval()
         print("Global Epoch %d, acc: %f, loss: %f\n" % (e, acc, loss))
